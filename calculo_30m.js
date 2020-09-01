@@ -6,7 +6,7 @@
 
 //Carrega os assets e valores assumidos constantes:
 //Assets: mascara (limite estadual) [mask], biofísico [bioft]; spline multivariada espacial [sp]
-//Constantes: interceptos [i1, i2]; ano de referencia: 2017; anos do modelo [anos]; coeficientes de expansao pecuaria [pec]; coeficientes de expansao agricola [agr];
+//Constantes: interceptos [i1, i2]; ano de referencia: 2019; anos do modelo [anos]; coeficientes de expansao pecuaria [pec]; coeficientes de expansao agricola [agr];
 var mask, estados;
 mask = estados = ee.Image('projects/mapbiomas-workspace/AUXILIAR/estados-2016-raster');
 var bioft1 = ee.Image('projects/mapbiomas-workspace/CENARIOS/biofisico/pred_2017_bioft1_all').divide(10000).updateMask(mask);
@@ -15,7 +15,7 @@ var bioft2 = ee.Image('projects/mapbiomas-workspace/CENARIOS/biofisico/pred_2017
 var spt2 = ee.Image('projects/mapbiomas-workspace/CENARIOS/spline/pred_2017_spt2_all').divide(10000).updateMask(mask);
 var i1 = -3.876646720;
 var i2 = -3.656398079;
-var ano_ref = 2017;
+var ano_ref = 2019;
 
 var anos = [2025, 2030, 2035];
 var pec = [0.04833552, -0.02645261, -0.10124075];
@@ -36,14 +36,14 @@ var str_ano = 2025;
 //Varia ligeiramente a taxa de conversao a partir do cenario
 var tax_c1 = 1;
 var tax_c2 = 1;
-//Para cada status S1, +2.5% em [vn2pas,vn2agr,pas2agr], -2.5% em [agr2vn,pas2vn,agr2pas]
+//Para cada status S1, +2.0% em [vn2pas,vn2agr,pas2agr], -2.0% em [agr2vn,pas2vn,agr2pas]
 //Para cada status S2, +1.0% em [vn2pas,vn2agr,pas2agr], -1.0% em [agr2vn,pas2vn,agr2pas]
 //Status S3 nao alteram a taxa
 var cen = [str_ucs, str_cli, str_rod, str_uhe, str_urb];
 cen.map(function(i){
   if(i == 'S1'){
-    tax_c1 += 2.5/100;
-    tax_c2 -= 2.5/100;
+    tax_c1 += 2/100;
+    tax_c2 -= 2/100;
   } else if(i == 'S2'){
     tax_c1 += 1/100;
     tax_c2 -= 1/100;
@@ -192,15 +192,16 @@ var prob_agr2vn = prob_vn.divide(prob_agr.add(prob_vn));
 
 /* Início do passo 2: desagregação do cenário econômico projetado */
 
-//Carrega o uso do solo futuro [uso_pred] e 2017 [uso2017]
-var mapb = ee.Image('projects/mapbiomas-workspace/public/collection5/mapbiomas_collection50_integration_v1').select('classification_2017');
+//Carrega o uso do solo futuro [uso_pred] e 2019 [uso_ref]
+var mapb = ee.ImageCollection("projects/mapbiomas-workspace/COLECAO5/mapbiomas-collection50-integration-v8").mosaic().select('classification_' + ano_ref);
 mapb = mapb.remap(
-	[1, 2, 3, 4, 5, 10, 11, 12, 9, 14, 18, 19, 39, 20, 40, 41, 42, 43, 44, 45, 36, 21, 15],
-	[0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1]
+	[3, 4, 5, 11, 12, 9, 19, 39, 20, 40, 41, 42, 43, 44, 45, 36, 21, 15],
+	[0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1]
 );
-var uso_pred, uso2017;
+
+var uso_pred, uso_ref;
 uso_pred = mapb;
-uso2017 = mapb;
+uso_ref = mapb;
 
 //Carrega as variações na cobertura do solo por estado, medias anuais desde 2010
 //Formato: agr2pas, agr2vn, pas2agr, pas2vn, vn2agr, vn2pas
@@ -237,7 +238,7 @@ var idx = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
 
 //vn2pas
 var loc_vn2pas = ee.ImageCollection.fromImages(idx.map(function(id){
-  var prob_it = prob_vn2pas.updateMask(estados.eq(ests[id])).updateMask(uso2017.eq(0));
+  var prob_it = prob_vn2pas.updateMask(estados.eq(ests[id])).updateMask(uso_ref.eq(0));
   var area_vn2pas = meds[id][5] * (str_ano - ano_ref) * tax_c1;
   var area_tot = prob_it.gte(0).multiply(ee.Image.pixelArea()).divide(10000).reduceRegion({
     reducer: ee.Reducer.sum(),
@@ -256,7 +257,7 @@ var loc_vn2pas = ee.ImageCollection.fromImages(idx.map(function(id){
 
 //vn2agr
 var loc_vn2agr = ee.ImageCollection.fromImages(idx.map(function(id){
-  var prob_it = prob_vn2agr.updateMask(estados.eq(ests[id])).updateMask(uso2017.eq(0));
+  var prob_it = prob_vn2agr.updateMask(estados.eq(ests[id])).updateMask(uso_ref.eq(0));
   var area_vn2agr = meds[id][4] * (str_ano - ano_ref) * tax_c1;
   var area_tot = prob_it.gte(0).multiply(ee.Image.pixelArea()).divide(10000).reduceRegion({
     reducer: ee.Reducer.sum(),
@@ -275,7 +276,7 @@ var loc_vn2agr = ee.ImageCollection.fromImages(idx.map(function(id){
 
 //pas2vn
 var loc_pas2vn = ee.ImageCollection.fromImages(idx.map(function(id){
-  var prob_it = prob_pas2vn.updateMask(estados.eq(ests[id])).updateMask(uso2017.eq(1));
+  var prob_it = prob_pas2vn.updateMask(estados.eq(ests[id])).updateMask(uso_ref.eq(1));
   var area_pas2vn = meds[id][3] * (str_ano - ano_ref) * tax_c2;
   var area_tot = prob_it.gte(0).multiply(ee.Image.pixelArea()).divide(10000).reduceRegion({
     reducer: ee.Reducer.sum(),
@@ -294,7 +295,7 @@ var loc_pas2vn = ee.ImageCollection.fromImages(idx.map(function(id){
 
 //pas2agr
 var loc_pas2agr = ee.ImageCollection.fromImages(idx.map(function(id){
-  var prob_it = prob_pas2agr.updateMask(estados.eq(ests[id])).updateMask(uso2017.eq(1));
+  var prob_it = prob_pas2agr.updateMask(estados.eq(ests[id])).updateMask(uso_ref.eq(1));
   var area_pas2agr = meds[id][2] * (str_ano - ano_ref) * tax_c1;
   var area_tot = prob_it.gte(0).multiply(ee.Image.pixelArea()).divide(10000).reduceRegion({
     reducer: ee.Reducer.sum(),
@@ -313,7 +314,7 @@ var loc_pas2agr = ee.ImageCollection.fromImages(idx.map(function(id){
 
 //agr2vn
 var loc_agr2vn = ee.ImageCollection.fromImages(idx.map(function(id){
-  var prob_it = prob_agr2vn.updateMask(estados.eq(ests[id])).updateMask(uso2017.eq(2));
+  var prob_it = prob_agr2vn.updateMask(estados.eq(ests[id])).updateMask(uso_ref.eq(2));
   var area_agr2vn = meds[id][1] * (str_ano - ano_ref) * tax_c2;
   var area_tot = prob_it.gte(0).multiply(ee.Image.pixelArea()).divide(10000).reduceRegion({
     reducer: ee.Reducer.sum(),
@@ -332,7 +333,7 @@ var loc_agr2vn = ee.ImageCollection.fromImages(idx.map(function(id){
 
 //agr2pas
 var loc_agr2pas = ee.ImageCollection.fromImages(idx.map(function(id){
-  var prob_it = prob_agr2pas.updateMask(estados.eq(ests[id])).updateMask(uso2017.eq(2));
+  var prob_it = prob_agr2pas.updateMask(estados.eq(ests[id])).updateMask(uso_ref.eq(2));
   var area_agr2pas = meds[id][0] * (str_ano - ano_ref) * tax_c2;
   var area_tot = prob_it.gte(0).multiply(ee.Image.pixelArea()).divide(10000).reduceRegion({
     reducer: ee.Reducer.sum(),
@@ -374,4 +375,3 @@ Export.image.toAsset({
   region: mask.geometry(),
   maxPixels: 1e13
 });
-
